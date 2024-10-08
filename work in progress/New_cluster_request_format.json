@@ -1,0 +1,12 @@
+
+{
+  "name": "clusterName",
+  "platformType": "Docker",
+  "agentsList": [
+    "agent1"
+  ],
+  "domainName": "example.org",
+  "creationTime": "Feb 08 2023 21:02:10",
+  "managedBy": "",
+  "uid": "UID"
+}
