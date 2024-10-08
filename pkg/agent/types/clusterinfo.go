@@ -4,7 +4,7 @@ package types
 // TODO include details field for extra info/tags in json format (probably a byte array)
 type ClusterInfo struct {
 	Name         string   `json:"name"`
-	EditedName   string   `json:"editedName"`
+	UID          string   `json:"UID"`  // Replaced EditedName with UID
 	CreationTime string   `json:"creationTime"`
 	DomainName   string   `json:"domainName"`
 	ManagedBy    string   `json:"managedBy"`

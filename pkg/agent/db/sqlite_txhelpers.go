@@ -48,13 +48,16 @@ func (t *tornjakTxHelper) rollbackHandler(err error) error {
 // insertClusterMetadata attempts insert into table clusters
 // returns SQLError upon failure and PostFailure on cluster existence
 func (t *tornjakTxHelper) insertClusterMetadata(cinfo types.ClusterInfo) error {
-	cmdInsert := `INSERT INTO clusters (name, created_at, domain_name, managed_by, platform_type) VALUES (?,?,?,?,?)`
+	// INSERT statement now includes UID
+	cmdInsert := `INSERT INTO clusters (uid, name, created_at, domain_name, managed_by, platform_type) VALUES (?,?,?,?,?,?)`
 	statement, err := t.tx.PrepareContext(t.ctx, cmdInsert)
 	if err != nil {
 		return SQLError{cmdInsert, err}
 	}
 	defer statement.Close()
-	_, err = statement.ExecContext(t.ctx, cinfo.Name, time.Now().Format("Jan 02 2006 15:04:05"), cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType)
+
+	// Using cinfo.UID instead of relying only on name
+	_, err = statement.ExecContext(t.ctx, cinfo.UID, cinfo.Name, time.Now().Format("Jan 02 2006 15:04:05"), cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType)
 	if err != nil {
 		if serr, ok := err.(sqlite3.Error); ok && serr.Code == sqlite3.ErrConstraint {
 			return PostFailure{"Cluster already exists; use Edit Cluster"}
@@ -67,13 +70,15 @@ func (t *tornjakTxHelper) insertClusterMetadata(cinfo types.ClusterInfo) error {
 // updateClusterMetadata attempts update of entry in table clusters
 // returns SQLError on failure and PostFailure on cluster non-existence
 func (t *tornjakTxHelper) updateClusterMetadata(cinfo types.ClusterInfo) error {
-	cmdUpdate := `UPDATE clusters SET name=?, domain_name=?, managed_by=?, platform_type=? WHERE name=?`
+	// Update based on UID instead of name
+	cmdUpdate := `UPDATE clusters SET name=?, domain_name=?, managed_by=?, platform_type=? WHERE uid=?`
 	statement, err := t.tx.PrepareContext(t.ctx, cmdUpdate)
 	if err != nil {
 		return SQLError{cmdUpdate, err}
 	}
 	defer statement.Close()
-	res, err := statement.ExecContext(t.ctx, cinfo.EditedName, cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType, cinfo.Name)
+
+	res, err := statement.ExecContext(t.ctx, cinfo.Name, cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType, cinfo.UID) // Using UID here
 	if err != nil {
 		if serr, ok := err.(sqlite3.Error); ok && serr.Code == sqlite3.ErrConstraint {
 			return PostFailure{"Cluster already exists; use Edit Cluster"}
@@ -95,13 +100,14 @@ func (t *tornjakTxHelper) updateClusterMetadata(cinfo types.ClusterInfo) error {
 
 // deleteClusterMetadata attemps delete of entry in table clusters
 // returns SQLError on failure and PostFailure on cluster non-existence
-func (t *tornjakTxHelper) deleteClusterMetadata(name string) error {
-	cmdDelete := `DELETE FROM clusters WHERE name=?`
+func (t *tornjakTxHelper) deleteClusterMetadata(uid string) error {
+	// Delete based on UID instead of name
+	cmdDelete := `DELETE FROM clusters WHERE uid=?`
 	statement, err := t.tx.PrepareContext(t.ctx, cmdDelete)
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}
-	res, err := statement.ExecContext(t.ctx, name)
+	res, err := statement.ExecContext(t.ctx, uid)
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}
@@ -118,7 +124,7 @@ func (t *tornjakTxHelper) deleteClusterMetadata(name string) error {
 // addAgentBatchToCluster adds entries in clusterMemberships table
 // takes in cluster name and list of agent spiffeids
 // returns SQLError on failure and PostFailure on conflict (an agent is already assigned)
-func (t *tornjakTxHelper) addAgentBatchToCluster(clustername string, agentsList []string) error {
+func (t *tornjakTxHelper) addAgentBatchToCluster(clusterUID string, agentsList []string) error {
 	if len(agentsList) == 0 {
 		return nil
 	}
@@ -143,8 +149,9 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clustername string, agentsList 
 	cmdBatch := "INSERT OR ABORT INTO cluster_memberships (agent_id, cluster_id) VALUES "
 	vals := []interface{}{}
 	for i := 0; i < len(agentsList); i++ {
-		cmdBatch += "((SELECT id FROM agents WHERE spiffeid=?), (SELECT id FROM clusters WHERE name=?)),"
-		vals = append(vals, agentsList[i], clustername)
+		// Using UID to find the cluster
+		cmdBatch += "((SELECT id FROM agents WHERE spiffeid=?), (SELECT id FROM clusters WHERE uid=?))," 
+		vals = append(vals, agentsList[i], clusterUID)
 	}
 	cmdBatch = strings.TrimSuffix(cmdBatch, ",")
 
@@ -163,18 +170,18 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clustername string, agentsList 
 		return SQLError{cmdBatch, err}
 	}
 	return nil
-
 }
 
 // deleteClusterAgents attempts removal of all agent-cluster pairs in clusterMemberships table
 // returns SQLError on failure
-func (t *tornjakTxHelper) deleteClusterAgents(clustername string) error {
-	cmdDelete := "DELETE FROM cluster_memberships WHERE cluster_id=(SELECT id FROM clusters WHERE name=?)"
+func (t *tornjakTxHelper) deleteClusterAgents(clusterUID string) error {
+	// Delete based on UID instead of name
+	cmdDelete := "DELETE FROM cluster_memberships WHERE cluster_id=(SELECT id FROM clusters WHERE uid=?)"
 	statementDelete, err := t.tx.PrepareContext(t.ctx, cmdDelete)
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}
-	_, err = statementDelete.ExecContext(t.ctx, clustername)
+	_, err = statementDelete.ExecContext(t.ctx, clusterUID) // Use UID here
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}

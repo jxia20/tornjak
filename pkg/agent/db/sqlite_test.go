@@ -9,6 +9,8 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v4"
 
+	"github.com/google/uuid"
+
 	"github.com/spiffe/tornjak/pkg/agent/types"
 )
 
@@ -227,21 +229,25 @@ func TestClusterCreate(t *testing.T) {
 
 	cinfo1 := types.ClusterInfo{
 		Name:         cluster1,
+		UID:          uuid.New().String(), 
 		PlatformType: vms,
 		AgentsList:   []string{agent1, agent2},
 	}
 	cinfo1a := types.ClusterInfo{
 		Name:         cluster1,
+		UID:		  cinfo1.UID, 
 		PlatformType: k8s,
 		AgentsList:   []string{agent1},
 	}
 	cinfo2 := types.ClusterInfo{
 		Name:         cluster2,
+		UID:          uuid.New().String(), 
 		PlatformType: vms,
 		AgentsList:   []string{agent2, agent4},
 	}
 	cinfo3 := types.ClusterInfo{
 		Name:         cluster3,
+		UID:          uuid.New().String(), 
 		PlatformType: k8s,
 		AgentsList:   []string{agent3},
 	}
@@ -403,8 +409,8 @@ func TestClusterEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	cList := cListObject.Clusters
-	if len(cList) > 0 {
-		t.Fatal("Clusters list should initially be empty")
+	if len(cList) != 1 || !clusterEquality(cList[0], cinfo1) {
+		t.Fatal("Clusters list after 1 insertion has incorrect cluster")
 	}
 
 	cluster1 := "cluster1"
@@ -420,44 +426,44 @@ func TestClusterEdit(t *testing.T) {
 
 	cinfo1 := types.ClusterInfo{
 		Name:         cluster1,
-		EditedName:   cluster1,
+		UID:          uuid.New().String(), 
 		PlatformType: vms,
 		AgentsList:   []string{agent1, agent2},
 	}
 	cinfo1New := types.ClusterInfo{
 		Name:         cluster1,
-		EditedName:   cluster1,
+		UID:		  cinfo1.UID,
 		PlatformType: k8s,
 		ManagedBy:    "MaiaIyer",
 		AgentsList:   []string{agent1, agent3},
 	}
 	cinfo2 := types.ClusterInfo{
 		Name:         cluster2,
-		EditedName:   cluster2,
+		UID:          uuid.New().String(), 
 		PlatformType: vms,
 		AgentsList:   []string{agent2, agent4},
 	}
 	cinfo3to4 := types.ClusterInfo{
 		Name:         cluster3,
-		EditedName:   cluster4,
+		UID:          cinfo3.UID, 
 		PlatformType: k8s,
 		AgentsList:   []string{agent2},
 	}
 	cinfo1to3 := types.ClusterInfo{
 		Name:         cluster1,
-		EditedName:   cluster3,
+		UID:          cinfo1.UID,  
 		PlatformType: k8s,
 		AgentsList:   []string{agent1},
 	}
 	cinfo3to2 := types.ClusterInfo{
 		Name:         cluster3,
-		EditedName:   cluster2,
+		UID:          cinfo3.UID, 
 		PlatformType: k8s,
 		AgentsList:   []string{agent1},
 	}
 	cinfo3 := types.ClusterInfo{
 		Name:         cluster3,
-		EditedName:   cluster3,
+		UID:          uuid.New().String(), 
 		PlatformType: k8s,
 		AgentsList:   []string{agent1},
 	}
@@ -784,11 +790,14 @@ func agentListComp(correctList []string, resultList []string) error {
 }
 
 func clusterEquality(c1 types.ClusterInfo, c2 types.ClusterInfo) bool {
-	if c1.Name != c2.Name || c1.DomainName != c2.DomainName ||
-		c1.ManagedBy != c2.ManagedBy || c1.PlatformType != c2.PlatformType {
-		return false
-	}
-	return agentListComp(c1.AgentsList, c2.AgentsList) == nil
+    if c1.UID != c2.UID || // Compare UID
+       c1.Name != c2.Name || 
+       c1.DomainName != c2.DomainName || 
+       c1.ManagedBy != c2.ManagedBy || 
+       c1.PlatformType != c2.PlatformType {
+        return false
+    }
+    return agentListComp(c1.AgentsList, c2.AgentsList) == nil
 }
 
 func inClusterList(cluster types.ClusterInfo, list []types.ClusterInfo) bool {
