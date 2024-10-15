@@ -49,48 +49,28 @@ func (t *tornjakTxHelper) rollbackHandler(err error) error {
 // returns SQLError upon failure and PostFailure on cluster existence
 func (t *tornjakTxHelper) insertClusterMetadata(cinfo types.ClusterInfo) error {
 	cmdInsert := `INSERT INTO clusters (name, created_at, domain_name, managed_by, platform_type) VALUES (?,?,?,?,?)`
+	// INSERT statement now includes UID
+	cmdInsert := `INSERT INTO clusters (uid, name, created_at, domain_name, managed_by, platform_type) VALUES (?,?,?,?,?,?)`
 	statement, err := t.tx.PrepareContext(t.ctx, cmdInsert)
 	if err != nil {
 		return SQLError{cmdInsert, err}
 	}
 	defer statement.Close()
 	_, err = statement.ExecContext(t.ctx, cinfo.Name, time.Now().Format("Jan 02 2006 15:04:05"), cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType)
-	if err != nil {
-		if serr, ok := err.(sqlite3.Error); ok && serr.Code == sqlite3.ErrConstraint {
-			return PostFailure{"Cluster already exists; use Edit Cluster"}
-		}
-		return SQLError{cmdInsert, err}
-	}
-	return nil
 }
 
 // updateClusterMetadata attempts update of entry in table clusters
 // returns SQLError on failure and PostFailure on cluster non-existence
 func (t *tornjakTxHelper) updateClusterMetadata(cinfo types.ClusterInfo) error {
-	cmdUpdate := `UPDATE clusters SET name=?, domain_name=?, managed_by=?, platform_type=? WHERE name=?`
+	
+	// Update based on UID instead of name
+	cmdUpdate := `UPDATE clusters SET name=?, domain_name=?, managed_by=?, platform_type=? WHERE uid=?`
 	statement, err := t.tx.PrepareContext(t.ctx, cmdUpdate)
 	if err != nil {
 		return SQLError{cmdUpdate, err}
 	}
 	defer statement.Close()
 	res, err := statement.ExecContext(t.ctx, cinfo.EditedName, cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType, cinfo.Name)
-	if err != nil {
-		if serr, ok := err.(sqlite3.Error); ok && serr.Code == sqlite3.ErrConstraint {
-			return PostFailure{"Cluster already exists; use Edit Cluster"}
-		}
-		return SQLError{cmdUpdate, err}
-	}
-
-	// check if update was successful
-	numRows, err := res.RowsAffected()
-	if err != nil {
-		return SQLError{cmdUpdate, err}
-	}
-	if numRows != 1 {
-		return PostFailure{"Cluster does not exist; use Create Cluster"}
-	}
-
-	return nil
 }
 
 // deleteClusterMetadata attemps delete of entry in table clusters
@@ -118,10 +98,11 @@ func (t *tornjakTxHelper) deleteClusterMetadata(name string) error {
 // addAgentBatchToCluster adds entries in clusterMemberships table
 // takes in cluster name and list of agent spiffeids
 // returns SQLError on failure and PostFailure on conflict (an agent is already assigned)
-func (t *tornjakTxHelper) addAgentBatchToCluster(clustername string, agentsList []string) error {
+unc (t *tornjakTxHelper) addAgentBatchToCluster(clusterUID string, agentsList []string) error {
 	if len(agentsList) == 0 {
 		return nil
 	}
+
 	// Add into agents table
 	cmdAgents := "INSERT OR IGNORE INTO agents (spiffeid, plugin) VALUES "
 	agents := []interface{}{}
@@ -142,10 +123,8 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clustername string, agentsList 
 	// generate single statement
 	cmdBatch := "INSERT OR ABORT INTO cluster_memberships (agent_id, cluster_id) VALUES "
 	vals := []interface{}{}
-	for i := 0; i < len(agentsList); i++ {
-		cmdBatch += "((SELECT id FROM agents WHERE spiffeid=?), (SELECT id FROM clusters WHERE name=?)),"
-		vals = append(vals, agentsList[i], clustername)
-	}
+	cmdBatch += "((SELECT id FROM agents WHERE spiffeid=?), (SELECT id FROM clusters WHERE uid=?))," 
+	vals = append(vals, agentsList[i], clusterUID)
 	cmdBatch = strings.TrimSuffix(cmdBatch, ",")
 
 	// prepare statement
@@ -168,15 +147,14 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clustername string, agentsList 
 
 // deleteClusterAgents attempts removal of all agent-cluster pairs in clusterMemberships table
 // returns SQLError on failure
-func (t *tornjakTxHelper) deleteClusterAgents(clustername string) error {
-	cmdDelete := "DELETE FROM cluster_memberships WHERE cluster_id=(SELECT id FROM clusters WHERE name=?)"
+unc (t *tornjakTxHelper) deleteClusterAgents(clusterUID string) error {
+	// Delete based on UID instead of name
+	cmdDelete := "DELETE FROM cluster_memberships WHERE cluster_id=(SELECT id FROM clusters WHERE uid=?)"
 	statementDelete, err := t.tx.PrepareContext(t.ctx, cmdDelete)
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}
-	_, err = statementDelete.ExecContext(t.ctx, clustername)
+	_, err = statementDelete.ExecContext(t.ctx, clusterUID) // Use UID here
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}
-	return nil
-}
