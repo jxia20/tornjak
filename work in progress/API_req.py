@@ -24,7 +24,7 @@ json_data = json.dumps(cluster_definition)
 
 # Print or send json_data to your API
 print(json_data)
-url = "http://your.api.endpoint"
+url = "http://localhost:10000/api/v1/torjnak/clusters"
 response = requests.post(url, json=cluster_definition)
 
 print(response.status_code)

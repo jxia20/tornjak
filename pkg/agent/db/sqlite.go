@@ -19,8 +19,8 @@ const (
                             (id INTEGER PRIMARY KEY AUTOINCREMENT, spiffeid TEXT, plugin TEXT, UNIQUE (spiffeid))`
 	// cluster table with fields name, domainName, platformtype, managedby
 	initClustersTable = `CREATE TABLE IF NOT EXISTS clusters 
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, created_at TEXT, 
-                            domain_name TEXT, platform_type TEXT, managed_by TEXT, UNIQUE (name))`
+                            (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, created_at TEXT, 
+                            domain_name TEXT, platform_type TEXT, managed_by TEXT, UNIQUE (uid))`
 	// cluster - agent relation table specifying by clusterid and spiffeid
 	//                                enforces uniqueness of spiffeid
 	initClusterMemberTable = `CREATE TABLE IF NOT EXISTS cluster_memberships 
@@ -254,12 +254,12 @@ func (db *LocalSqliteDb) GetAgentsMetadata(req types.AgentMetadataRequest) (type
 // GetClusters outputs a list of ClusterInfo structs with information on currently registered clusters
 func (db *LocalSqliteDb) GetClusters() (types.ClusterInfoList, error) {
 	// BEGIN transaction
-	cmd := `SELECT clusters.name, clusters.created_at, clusters.domain_name, clusters.managed_by, 
+	cmd := `SELECT clusters.uid, clusters.created_at, clusters.domain_name, clusters.managed_by, 
           clusters.platform_type, GROUP_CONCAT(agents.spiffeid) 
           FROM clusters 
           LEFT JOIN cluster_memberships ON clusters.id=cluster_memberships.cluster_id
           LEFT JOIN agents ON cluster_memberships.agent_id=agents.id
-          GROUP BY clusters.name`
+          GROUP BY clusters.uid`
 
 	rows, err := db.database.Query(cmd)
 	if err != nil {
@@ -318,7 +318,7 @@ func (db *LocalSqliteDb) createClusterEntryOp(cinfo types.ClusterInfo) error {
 	}
 
 	// ADD agents to cluster
-	err = txHelper.addAgentBatchToCluster(cinfo.Name, cinfo.AgentsList)
+	err = txHelper.addAgentBatchToCluster(cinfo.UID, cinfo.AgentsList)
 	if err != nil {
 		return backoff.Permanent(txHelper.rollbackHandler(err))
 	}
@@ -342,13 +342,13 @@ func (db *LocalSqliteDb) editClusterEntryOp(cinfo types.ClusterInfo) error {
 	}
 
 	// REMOVE all currently assigned cluster agents
-	err = txHelper.deleteClusterAgents(cinfo.EditedName)
+	err = txHelper.deleteClusterAgents(cinfo.UID)
 	if err != nil {
 		return backoff.Permanent(txHelper.rollbackHandler(err))
 	}
 
 	// ADD agents to cluster
-	err = txHelper.addAgentBatchToCluster(cinfo.EditedName, cinfo.AgentsList)
+	err = txHelper.addAgentBatchToCluster(cinfo.UID, cinfo.AgentsList)
 	if err != nil {
 		return backoff.Permanent(txHelper.rollbackHandler(err))
 	}
@@ -367,13 +367,13 @@ func (db *LocalSqliteDb) deleteClusterEntryOp(clusterName string) error {
 	txHelper := getTornjakTxHelper(ctx, tx)
 
 	// REMOVE all currently assigned cluster agents (requires metadata still entered)
-	err = txHelper.deleteClusterAgents(clusterName)
+	err = txHelper.deleteClusterAgents(clusterUID)
 	if err != nil {
 		return backoff.Permanent(txHelper.rollbackHandler(err))
 	}
 
 	// REMOVE cluster metadata
-	err = txHelper.deleteClusterMetadata(clusterName)
+	err = txHelper.deleteClusterMetadata(clusterUID)
 	if err != nil {
 		return backoff.Permanent(txHelper.rollbackHandler(err))
 	}

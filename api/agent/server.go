@@ -207,7 +207,7 @@ func (s *Server) GetRouter() http.Handler {
 	apiRtr.HandleFunc("/api/tornjak/clusters/list", s.clusterList)
 	apiRtr.HandleFunc("/api/tornjak/clusters/create", s.clusterCreate)
 	apiRtr.HandleFunc("/api/tornjak/clusters/edit", s.clusterEdit)
-	apiRtr.HandleFunc("/api/tornjak/clusters/delete", s.clusterDelete)
+	apiRtr.HandleFunc("/api/tornjak/clusters/delete/{uid}", s.clusterDelete)
 
 	// Spire APIs with versioning
 	apiRtr.HandleFunc("/api/v1/spire/serverinfo", s.debugServer).Methods(http.MethodGet, http.MethodOptions)
