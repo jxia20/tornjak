@@ -247,15 +247,21 @@ class ClusterCreate extends Component<ClusterCreateProp, ClusterCreateState> {
     }
 
     axios.post(endpoint, cjtData)
-      .then(
-        res => {
-          this.setState({
-            message: "Request:" + JSON.stringify(cjtData, null, ' ') + "\n\nSuccess:" + JSON.stringify(res.data, null, ' '),
-            statusOK: "OK",
-          })
-        }
-      )
-      .catch(err => showResponseToast(err))
+        .then(res => {
+            const { cluster } = res.data;  // Assuming response contains cluster info with UID
+            this.setState({
+                message: `Request: ${JSON.stringify(cjtData, null, ' ')}\n\nSuccess: ${JSON.stringify(res.data, null, ' ')}`,
+                statusOK: "OK",
+            });
+
+            // Display success message with the generated UID
+            window.alert(`Cluster "${cluster.name}" created successfully with UID: ${cluster.uid}`);
+        })
+        .catch(err => {
+            showResponseToast(err);
+            this.setState({ statusOK: "ERROR" });
+        });
+        
     //scroll to bottom of page after submission  
     setTimeout(() => {
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });

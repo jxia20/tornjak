@@ -88,13 +88,23 @@ type RegisterClusterRequest tornjakTypes.ClusterInput
 // DefineCluster registers cluster to local DB
 func (s *Server) DefineCluster(inp RegisterClusterRequest) error {
 	cinfo := tornjakTypes.ClusterInfo(inp.ClusterInstance)
+
+	// Check mandatory fields
 	if len(cinfo.Name) == 0 {
 		return errors.New("cluster definition missing mandatory field - Name")
 	} else if len(cinfo.PlatformType) == 0 {
 		return errors.New("cluster definition missing mandatory field - PlatformType")
-	} else if len(cinfo.EditedName) > 0 {
-		return errors.New("cluster definition attempts renaming on create cluster - EditedName")
 	}
+
+	// Generate a new UID if it's not provided
+	if len(cinfo.UID) == 0 {
+		newUID, err := uuid.NewUUID()
+		if err != nil {
+			return errors.New("failed to generate UID")
+		}
+		cinfo.UID = newUID.String()
+	}
+
 	return s.Db.CreateClusterEntry(cinfo)
 }
 
@@ -103,13 +113,16 @@ type EditClusterRequest tornjakTypes.ClusterInput
 // EditCluster registers cluster to local DB
 func (s *Server) EditCluster(inp EditClusterRequest) error {
 	cinfo := tornjakTypes.ClusterInfo(inp.ClusterInstance)
+
+	// Check mandatory fields
 	if len(cinfo.Name) == 0 {
 		return errors.New("cluster definition missing mandatory field - Name")
 	} else if len(cinfo.PlatformType) == 0 {
 		return errors.New("cluster definition missing mandatory field - PlatformType")
-	} else if len(cinfo.EditedName) == 0 {
-		return errors.New("cluster definition missing mandatory field - EditedName")
+	} else if len(cinfo.UID) == 0 {
+		return errors.New("cluster definition missing mandatory field - UID")
 	}
+
 	return s.Db.EditClusterEntry(cinfo)
 }
 
@@ -118,8 +131,10 @@ type DeleteClusterRequest tornjakTypes.ClusterInput
 // DeleteCluster deletes cluster with name cinfo.Name and assignment to agents
 func (s *Server) DeleteCluster(inp DeleteClusterRequest) error {
 	cinfo := tornjakTypes.ClusterInfo(inp.ClusterInstance)
-	if len(cinfo.Name) == 0 {
-		return errors.New("input missing mandatory field - Name")
+
+	if len(cinfo.UID) == 0 {
+		return errors.New("input missing mandatory field - UID")
 	}
-	return s.Db.DeleteClusterEntry(cinfo.Name)
+
+	return s.Db.DeleteClusterEntry(cinfo.UID)
 }

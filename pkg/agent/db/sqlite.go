@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/google/uuid"
-	
+
 	"github.com/spiffe/tornjak/pkg/agent/types"
 )
 
@@ -314,6 +314,15 @@ func (db *LocalSqliteDb) createClusterEntryOp(cinfo types.ClusterInfo) error {
 		return errors.Errorf("Error initializing context: %v", err)
 	}
 	txHelper := getTornjakTxHelper(ctx, tx)
+
+	// Generate a new UID if it is not provided
+	if cinfo.UID == "" {
+		newUID, uuidErr := uuid.NewUUID()
+		if uuidErr != nil {
+			return errors.Errorf("Error generating UID: %v", uuidErr)
+		}
+		cinfo.UID = newUID.String()
+	}
 
 	// INSERT cluster metadata
 	err = txHelper.insertClusterMetadata(cinfo)

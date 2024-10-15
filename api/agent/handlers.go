@@ -929,6 +929,18 @@ func (s *Server) clusterCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	// Generate a new UID if it's not provided
+	if input.UID == "" {
+		newUID, uuidErr := uuid.NewUUID()
+		if uuidErr != nil {
+			emsg := fmt.Sprintf("Error generating UID: %v", uuidErr)
+			retError(w, emsg, http.StatusInternalServerError)
+			return
+		}
+		input.UID = newUID.String()
+	}
+
 	err = s.DefineCluster(input)
 	if err != nil {
 		emsg := fmt.Sprintf("Error: %v", err.Error())
