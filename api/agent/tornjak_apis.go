@@ -100,7 +100,7 @@ func (s *Server) DefineCluster(inp RegisterClusterRequest) error {
 
 	// Generate a new UID if it's not provided
 	if len(cinfo.UID) == 0 {
-		newUID, err := uuid.New().string()
+		newUID, err := uuid.NewUUID()
 		if err != nil {
 			return errors.New("failed to generate UID")
 		}

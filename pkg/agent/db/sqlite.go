@@ -317,7 +317,7 @@ func (db *LocalSqliteDb) createClusterEntryOp(cinfo types.ClusterInfo) error {
 
 	// Generate a new UID if it is not provided
 	if cinfo.UID == "" {
-		newUID, uuidErr := uuid.New().string()
+		newUID, uuidErr := uuid.NewUUID()
 		if uuidErr != nil {
 			return errors.Errorf("Error generating UID: %v", uuidErr)
 		}
