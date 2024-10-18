@@ -3,6 +3,8 @@ package api
 import (
 	"errors"
 
+	"github.com/google/uuid"
+
 	tornjakTypes "github.com/spiffe/tornjak/pkg/agent/types"
 )
 
