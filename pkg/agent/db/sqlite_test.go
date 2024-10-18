@@ -416,6 +416,8 @@ func TestClusterEdit(t *testing.T) {
 	agent1 := "agent1"
 	agent2 := "agent2"
 
+	vms := "VMs"
+
 	cinfo1 := types.ClusterInfo{
 		Name:         cluster1,
 		UID:          uuid.New().String(),
@@ -428,7 +430,6 @@ func TestClusterEdit(t *testing.T) {
 
 	cluster2 := "cluster2"
 	cluster3 := "cluster3"
-	vms := "VMs"
 	k8s := "Kubernetes"
 	agent3 := "agent3"
 	agent4 := "agent4"

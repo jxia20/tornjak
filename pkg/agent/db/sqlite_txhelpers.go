@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 
 	"github.com/spiffe/tornjak/pkg/agent/types"
@@ -59,7 +58,7 @@ func (t *tornjakTxHelper) insertClusterMetadata(cinfo types.ClusterInfo) error {
 	// Using cinfo.UID instead of relying only on name
 	_, err = statement.ExecContext(t.ctx, cinfo.UID, cinfo.Name, time.Now().Format("Jan 02 2006 15:04:05"), cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType)
 	if err != nil {
-		if serr, ok := err.(sqlite3.Error); ok && serr.Code == sqlite3.ErrConstraint {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return PostFailure{"Cluster already exists; use Edit Cluster"}
 		}
 		return SQLError{cmdInsert, err}
@@ -80,7 +79,7 @@ func (t *tornjakTxHelper) updateClusterMetadata(cinfo types.ClusterInfo) error {
 
 	res, err := statement.ExecContext(t.ctx, cinfo.Name, cinfo.DomainName, cinfo.ManagedBy, cinfo.PlatformType, cinfo.UID) // Using UID here
 	if err != nil {
-		if serr, ok := err.(sqlite3.Error); ok && serr.Code == sqlite3.ErrConstraint {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return PostFailure{"Cluster already exists; use Edit Cluster"}
 		}
 		return SQLError{cmdUpdate, err}
@@ -150,7 +149,7 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clusterUID string, agentsList [
 	vals := []interface{}{}
 	for i := 0; i < len(agentsList); i++ {
 		// Using UID to find the cluster
-		cmdBatch += "((SELECT id FROM agents WHERE spiffeid=?), (SELECT id FROM clusters WHERE uid=?))," 
+		cmdBatch += "((SELECT id FROM agents WHERE spiffeid=?), (SELECT id FROM clusters WHERE uid=?)),"
 		vals = append(vals, agentsList[i], clusterUID)
 	}
 	cmdBatch = strings.TrimSuffix(cmdBatch, ",")
@@ -160,12 +159,10 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clusterUID string, agentsList [
 	if err != nil {
 		return SQLError{cmdBatch, err}
 	}
-	// execute single statement and check error
 	_, err = statementInsert.ExecContext(t.ctx, vals...)
 	if err != nil {
-		if serr, ok := err.(sqlite3.Error); ok && serr.Code == sqlite3.ErrConstraint {
-			// TODO add more details of agent conflict?
-			return PostFailure{serr.Error()}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return PostFailure{"Agent already assigned to another cluster"}
 		}
 		return SQLError{cmdBatch, err}
 	}
