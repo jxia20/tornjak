@@ -910,6 +910,8 @@ func (s *Server) clusterList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) clusterCreate(w http.ResponseWriter, r *http.Request) {
+	// Parse request body
+	var input RegisterClusterRequest
 	buf := new(strings.Builder)
 	n, err := io.Copy(buf, r.Body)
 	if err != nil {
@@ -918,7 +920,6 @@ func (s *Server) clusterCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := buf.String()
-	var input RegisterClusterRequest
 	if n == 0 {
 		input = RegisterClusterRequest{}
 	} else {
@@ -930,30 +931,12 @@ func (s *Server) clusterCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Generate a new UID if it's not provided
-	if input.UID == "" {
-		newUID, uuidErr := uuid.NewUUID()
-		if uuidErr != nil {
-			emsg := fmt.Sprintf("Error generating UID: %v", uuidErr)
-			retError(w, emsg, http.StatusInternalServerError)
-			return
-		}
-		input.UID = newUID.String()
+	// Return success response, including the UID in the response
+	w.WriteHeader(http.StatusOK)
+	response := map[string]string{
+		"message": "Cluster created successfully",
 	}
-
-	err = s.DefineCluster(input)
-	if err != nil {
-		emsg := fmt.Sprintf("Error: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
-	cors(w, r)
-	_, err = w.Write([]byte("SUCCESS"))
-	if err != nil {
-		emsg := fmt.Sprintf("Error: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (s *Server) clusterEdit(w http.ResponseWriter, r *http.Request) {

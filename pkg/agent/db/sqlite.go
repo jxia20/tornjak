@@ -10,8 +10,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 
-	"github.com/google/uuid"
-
 	"github.com/spiffe/tornjak/pkg/agent/types"
 )
 
@@ -370,7 +368,7 @@ func (db *LocalSqliteDb) editClusterEntryOp(cinfo types.ClusterInfo) error {
 }
 
 // DeleteClusterEntry takes in string name of cluster and removes cluster information and agent membership of cluster from the database.  If not all agents can be removed from the cluster, cluster information remains in the database.
-func (db *LocalSqliteDb) deleteClusterEntryOp(clusterName string) error {
+func (db *LocalSqliteDb) deleteClusterEntryOp(uid string) error {
 	// BEGIN transaction
 	ctx := context.Background()
 	tx, err := db.database.BeginTx(ctx, nil)
@@ -380,13 +378,13 @@ func (db *LocalSqliteDb) deleteClusterEntryOp(clusterName string) error {
 	txHelper := getTornjakTxHelper(ctx, tx)
 
 	// REMOVE all currently assigned cluster agents (requires metadata still entered)
-	err = txHelper.deleteClusterAgents(clusterUID)
+	err = txHelper.deleteClusterAgents(uid)
 	if err != nil {
 		return backoff.Permanent(txHelper.rollbackHandler(err))
 	}
 
 	// REMOVE cluster metadata
-	err = txHelper.deleteClusterMetadata(clusterUID)
+	err = txHelper.deleteClusterMetadata(uid)
 	if err != nil {
 		return backoff.Permanent(txHelper.rollbackHandler(err))
 	}
@@ -418,9 +416,9 @@ func (db *LocalSqliteDb) EditClusterEntry(cinfo types.ClusterInfo) error {
 	return db.retryOp(operation)
 }
 
-func (db *LocalSqliteDb) DeleteClusterEntry(clustername string) error {
+func (db *LocalSqliteDb) DeleteClusterEntry(uid string) error {
 	operation := func() error {
-		return db.deleteClusterEntryOp(clustername)
+		return db.deleteClusterEntryOp(uid)
 	}
 	return db.retryOp(operation)
 }
