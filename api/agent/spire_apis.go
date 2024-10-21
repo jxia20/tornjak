@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
+
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 

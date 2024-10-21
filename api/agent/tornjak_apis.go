@@ -92,8 +92,8 @@ func (s *Server) DefineCluster(inp RegisterClusterRequest) error {
 		return errors.New("cluster definition missing mandatory field - Name")
 	} else if len(cinfo.PlatformType) == 0 {
 		return errors.New("cluster definition missing mandatory field - PlatformType")
-	} else if len(cinfo.EditedName) > 0 {
-		return errors.New("cluster definition attempts renaming on create cluster - EditedName")
+	} else if len(cinfo.EditedUid) > 0 {
+		return errors.New("cluster definition attempts renaming on create cluster - EditedUid")
 	}
 	return s.Db.CreateClusterEntry(cinfo)
 }
@@ -103,12 +103,12 @@ type EditClusterRequest tornjakTypes.ClusterInput
 // EditCluster registers cluster to local DB
 func (s *Server) EditCluster(inp EditClusterRequest) error {
 	cinfo := tornjakTypes.ClusterInfo(inp.ClusterInstance)
-	if len(cinfo.Name) == 0 {
+	if len(cinfo.Uid) == 0 {
 		return errors.New("cluster definition missing mandatory field - Name")
 	} else if len(cinfo.PlatformType) == 0 {
 		return errors.New("cluster definition missing mandatory field - PlatformType")
-	} else if len(cinfo.EditedName) == 0 {
-		return errors.New("cluster definition missing mandatory field - EditedName")
+	} else if len(cinfo.EditedUid) == 0 {
+		return errors.New("cluster definition missing mandatory field - EditedUid")
 	}
 	return s.Db.EditClusterEntry(cinfo)
 }
