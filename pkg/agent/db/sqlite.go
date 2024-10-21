@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/spiffe/tornjak/pkg/agent/types"
+	"github.com/google/uuid"
 )
 
 const (
