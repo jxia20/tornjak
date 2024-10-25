@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
 	"github.com/spiffe/tornjak/pkg/agent/types"
 )
 
@@ -97,10 +96,10 @@ func (t *tornjakTxHelper) updateClusterMetadata(cinfo types.ClusterInfo) error {
 	return nil
 }
 
-// deleteClusterMetadata attemps delete of entry in table clusters
+// deleteClusterMetadata attempts delete of entry in table clusters
 // returns SQLError on failure and PostFailure on cluster non-existence
 func (t *tornjakTxHelper) deleteClusterMetadata(uid string) error {
-	// Delete based on UID instead of name
+	// Delete based on UID
 	cmdDelete := `DELETE FROM clusters WHERE uid=?`
 	statement, err := t.tx.PrepareContext(t.ctx, cmdDelete)
 	if err != nil {
@@ -121,9 +120,9 @@ func (t *tornjakTxHelper) deleteClusterMetadata(uid string) error {
 }
 
 // addAgentBatchToCluster adds entries in clusterMemberships table
-// takes in cluster name and list of agent spiffeids
+// takes in cluster UID and list of agent spiffeids
 // returns SQLError on failure and PostFailure on conflict (an agent is already assigned)
-func (t *tornjakTxHelper) addAgentBatchToCluster(clusterUID string, agentsList []string) error {
+func (t *tornjakTxHelper) addAgentBatchToCluster(uid string, agentsList []string) error {
 	if len(agentsList) == 0 {
 		return nil
 	}
@@ -144,17 +143,17 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clusterUID string, agentsList [
 		return SQLError{cmdAgents, err}
 	}
 
-	// generate single statement
+	// Generate single statement
 	cmdBatch := "INSERT OR ABORT INTO cluster_memberships (agent_id, cluster_id) VALUES "
 	vals := []interface{}{}
 	for i := 0; i < len(agentsList); i++ {
 		// Using UID to find the cluster
 		cmdBatch += "((SELECT id FROM agents WHERE spiffeid=?), (SELECT id FROM clusters WHERE uid=?)),"
-		vals = append(vals, agentsList[i], clusterUID)
+		vals = append(vals, agentsList[i], uid)
 	}
 	cmdBatch = strings.TrimSuffix(cmdBatch, ",")
 
-	// prepare statement
+	// Prepare statement
 	statementInsert, err := t.tx.PrepareContext(t.ctx, cmdBatch)
 	if err != nil {
 		return SQLError{cmdBatch, err}
@@ -171,14 +170,14 @@ func (t *tornjakTxHelper) addAgentBatchToCluster(clusterUID string, agentsList [
 
 // deleteClusterAgents attempts removal of all agent-cluster pairs in clusterMemberships table
 // returns SQLError on failure
-func (t *tornjakTxHelper) deleteClusterAgents(clusterUID string) error {
+func (t *tornjakTxHelper) deleteClusterAgents(uid string) error {
 	// Delete based on UID instead of name
 	cmdDelete := "DELETE FROM cluster_memberships WHERE cluster_id=(SELECT id FROM clusters WHERE uid=?)"
 	statementDelete, err := t.tx.PrepareContext(t.ctx, cmdDelete)
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}
-	_, err = statementDelete.ExecContext(t.ctx, clusterUID) // Use UID here
+	_, err = statementDelete.ExecContext(t.ctx, uid) // Use UID here
 	if err != nil {
 		return SQLError{cmdDelete, err}
 	}
