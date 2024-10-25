@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/uuid"
-
+	tornjakTypes "github.com/spiffe/tornjak/pkg/agent/types"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -21,8 +20,8 @@ import (
 type HealthcheckRequest grpc_health_v1.HealthCheckRequest
 type HealthcheckResponse grpc_health_v1.HealthCheckResponse
 
-func (s *Server) SPIREHealthcheck(inp HealthcheckRequest) (*HealthcheckResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := grpc_health_v1.HealthCheckRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
+func (s *Server) SPIREHealthcheck(inp HealthcheckRequest) (*HealthcheckResponse, error) {
+	inpReq := grpc_health_v1.HealthCheckRequest(inp)
 	var conn *grpc.ClientConn
 	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -39,11 +38,59 @@ func (s *Server) SPIREHealthcheck(inp HealthcheckRequest) (*HealthcheckResponse,
 	return (*HealthcheckResponse)(resp), nil
 }
 
+type ListSelectorsRequest struct{}
+type ListSelectorsResponse tornjakTypes.AgentInfoList
+
+// ListSelectors returns a list of selectors from the local DB
+func (s *Server) ListSelectors(inp ListSelectorsRequest) (*ListSelectorsResponse, error) {
+	resp, err := s.Db.GetAgentSelectors()
+	if err != nil {
+		return nil, err
+	}
+	return (*ListSelectorsResponse)(&resp), nil
+}
+
+type RegisterSelectorRequest tornjakTypes.AgentInfo
+
+// DefineSelectors registers an agent to the local DB
+func (s *Server) DefineSelectors(inp RegisterSelectorRequest) error {
+	sinfo := tornjakTypes.AgentInfo(inp)
+	if len(sinfo.Spiffeid) == 0 {
+		return errors.New("agent's info missing mandatory field - Spiffeid")
+	}
+	return s.Db.CreateAgentEntry(sinfo)
+}
+
+type UpdateSelectorRequest tornjakTypes.AgentInfo
+
+// UpdateSelectors updates an existing selector
+func (s *Server) UpdateSelectors(inp UpdateSelectorRequest) error {
+	sinfo := tornjakTypes.AgentInfo(inp)
+	if len(sinfo.Spiffeid) == 0 {
+		return errors.New("agent's info missing mandatory field - Spiffeid")
+	}
+	return s.Db.UpdateAgentEntry(sinfo)
+}
+
+type DeleteSelectorRequest struct {
+	Spiffeid string `json:"spiffeid"` // Identifier for the selector to delete
+}
+
+// DeleteSelectors deletes a specified selector
+func (s *Server) DeleteSelectors(inp DeleteSelectorRequest) error {
+	if len(inp.Spiffeid) == 0 {
+		return errors.New("input missing mandatory field - Spiffeid")
+	}
+	return s.Db.DeleteAgentEntry(inp.Spiffeid)
+}
+
+// Debug Server
+
 type DebugServerRequest debugServer.GetInfoRequest
 type DebugServerResponse debugServer.GetInfoResponse
 
-func (s *Server) DebugServer(inp DebugServerRequest) (*DebugServerResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := debugServer.GetInfoRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
+func (s *Server) DebugServer(inp DebugServerRequest) (*DebugServerResponse, error) {
+	inpReq := debugServer.GetInfoRequest(inp)
 	var conn *grpc.ClientConn
 	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -60,11 +107,13 @@ func (s *Server) DebugServer(inp DebugServerRequest) (*DebugServerResponse, erro
 	return (*DebugServerResponse)(resp), nil
 }
 
+// List Agents
+
 type ListAgentsRequest agent.ListAgentsRequest
 type ListAgentsResponse agent.ListAgentsResponse
 
-func (s *Server) ListAgents(inp ListAgentsRequest) (*ListAgentsResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.ListAgentsRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
+func (s *Server) ListAgents(inp ListAgentsRequest) (*ListAgentsResponse, error) {
+	inpReq := agent.ListAgentsRequest(inp)
 	var conn *grpc.ClientConn
 	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -79,90 +128,6 @@ func (s *Server) ListAgents(inp ListAgentsRequest) (*ListAgentsResponse, error) 
 	}
 
 	return (*ListAgentsResponse)(resp), nil
-}
-
-type BanAgentRequest agent.BanAgentRequest
-
-func (s *Server) BanAgent(inp BanAgentRequest) error { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.BanAgentRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	client := agent.NewAgentClient(conn)
-
-	_, err = client.BanAgent(context.Background(), &inpReq)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-type DeleteAgentRequest agent.DeleteAgentRequest
-
-func (s *Server) DeleteAgent(inp DeleteAgentRequest) error { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.DeleteAgentRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	client := agent.NewAgentClient(conn)
-
-	_, err = client.DeleteAgent(context.Background(), &inpReq)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-type CreateJoinTokenRequest agent.CreateJoinTokenRequest
-type CreateJoinTokenResponse types.JoinToken
-
-func (s *Server) CreateJoinToken(inp CreateJoinTokenRequest) (*CreateJoinTokenResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.CreateJoinTokenRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	client := agent.NewAgentClient(conn)
-
-	joinToken, err := client.CreateJoinToken(context.Background(), &inpReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return (*CreateJoinTokenResponse)(joinToken), nil
-}
-
-// Entries
-
-type ListEntriesRequest entry.ListEntriesRequest
-type ListEntriesResponse entry.ListEntriesResponse
-
-func (s *Server) ListEntries(inp ListEntriesRequest) (*ListEntriesResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := entry.ListEntriesRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	client := entry.NewEntryClient(conn)
-
-	resp, err := client.ListEntries(context.Background(), &inpReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return (*ListEntriesResponse)(resp), nil
 }
 
 type BatchCreateEntryRequest entry.BatchCreateEntryRequest
