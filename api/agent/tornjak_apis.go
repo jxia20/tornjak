@@ -125,6 +125,7 @@ func (s *Server) EditCluster(inp EditClusterRequest) error {
 		return errors.New("cluster definition missing mandatory field - UID")
 	}
 
+	// Attempt to update the cluster in the database
 	return s.Db.EditClusterEntry(cinfo)
 }
 

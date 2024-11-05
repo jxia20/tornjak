@@ -257,11 +257,11 @@ func (db *LocalSqliteDb) GetAgentsMetadata(req types.AgentMetadataRequest) (type
 func (db *LocalSqliteDb) GetClusters() (types.ClusterInfoList, error) {
 	// BEGIN transaction
 	cmd := `SELECT clusters.uid, clusters.name, clusters.created_at, clusters.domain_name, clusters.managed_by, 
-          clusters.platform_type, GROUP_CONCAT(agents.spiffeid) 
-          FROM clusters 
-          LEFT JOIN cluster_memberships ON clusters.id=cluster_memberships.cluster_id
-          LEFT JOIN agents ON cluster_memberships.agent_id=agents.id
-          GROUP BY clusters.uid`
+        clusters.platform_type, GROUP_CONCAT(agents.spiffeid) 
+        FROM clusters 
+        LEFT JOIN cluster_memberships ON clusters.id=cluster_memberships.cluster_id
+        LEFT JOIN agents ON cluster_memberships.agent_id=agents.id
+        GROUP BY clusters.uid`
 
 	rows, err := db.database.Query(cmd)
 	if err != nil {

@@ -55,6 +55,7 @@ type ClusterEditProp = {
 type ClusterEditState = {
   originalClusterName: string,
   clusterName: string,
+  clusterUID: string,
   clusterType: string,
   clusterDomainName: string,
   clusterManagedBy: string,
@@ -171,6 +172,7 @@ class ClusterEdit extends Component<ClusterEditProp, ClusterEditState> {
     this.setState({
       originalClusterName: cluster.name,
       clusterName: cluster.name,
+      clusterUID: cluster.UID, 
       clusterType: cluster.platformType,
       clusterDomainName: cluster.domainName,
       clusterManagedBy: cluster.managedBy,
@@ -328,6 +330,7 @@ class ClusterEdit extends Component<ClusterEditProp, ClusterEditState> {
 
     var cjtData = {
       cluster: {
+        UID: this.state.clusterUID, 
         Name: this.state.originalClusterName,
         EditedName: this.state.clusterName,
         PlatformType: this.state.clusterType,
