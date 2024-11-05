@@ -38,7 +38,7 @@ export interface AgentsWorkLoadAttestorInfo {
 // clusters
 export interface ClustersList {
   name: string; // Name of Cluster
-  editedName: string; // Edited Name if Cluster Name is edited from original
+  UID: string; // UID
   creationTime: string; // Time cluster is created
   domainName: string; // Domain Name of cluster if any
   managedBy: string; // Person/ entity managing the cluster
