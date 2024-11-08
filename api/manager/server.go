@@ -1,4 +1,4 @@
-package managerapi
+package main
 
 import (
 	"encoding/json"
@@ -37,16 +37,16 @@ func corsHandler(f func(w http.ResponseWriter, r *http.Request)) http.HandlerFun
 }
 
 func cors(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=ascii")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,access-control-allow-origin, access-control-allow-headers")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Origin, Access-Control-Allow-Headers")
 	w.WriteHeader(http.StatusOK)
 }
 
 func retError(w http.ResponseWriter, emsg string, status int) {
-	w.Header().Set("Content-Type", "text/html; charset=ascii")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,access-control-allow-origin, access-control-allow-headers")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Origin, Access-Control-Allow-Headers")
 	http.Error(w, emsg, status)
 }
 
@@ -58,181 +58,122 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
-// Returns a post proxy function for tornjak api, where path is the path from the base URL, i.e. "/api/entry/delete"
-func (s *Server) apiServerProxyFunc(apiPath string, apiMethod string) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		serverName := vars["server"]
+// SPIRE Health Check Handler
+func (s *Server) spireHealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	serverName := vars["server"]
 
-		fmt.Println(serverName)
+	// Retrieve server info
+	sinfo, err := s.db.GetServer(serverName)
+	if err != nil {
+		retError(w, fmt.Sprintf("Error retrieving server info: %v", err.Error()), http.StatusBadRequest)
+		return
+	}
 
-		// Get server info
-		sinfo, err := s.db.GetServer(serverName)
-		if err != nil {
-			emsg := fmt.Sprintf("Error getting server info: %v", err.Error())
-			retError(w, emsg, http.StatusBadRequest)
-			return
-		}
+	// Create HTTP client
+	client, err := sinfo.HttpClient()
+	if err != nil {
+		retError(w, fmt.Sprintf("Error creating HTTP client: %v", err.Error()), http.StatusBadRequest)
+		return
+	}
 
-		// Gather the certs and key into a map
-		cMap := make(map[string]string)
-		cMap["CA"] = string(sinfo.CA)
-		cMap["cert"] = string(sinfo.Cert)
-		cMap["key"] = string(sinfo.Key)
+	// Make API request to SPIRE server
+	req, err := http.NewRequest(http.MethodGet, strings.TrimSuffix(sinfo.Address, "/")+"/api/v1/spire/healthcheck", nil)
+	if err != nil {
+		retError(w, fmt.Sprintf("Error creating HTTP request: %v", err.Error()), http.StatusBadRequest)
+		return
+	}
 
-		// Iterate through the map and trim the values for debugging.
-		// Show the endings only
-		for k, v := range cMap {
-			if k == "key" {
-				if len(v) > keyShowLen {
-					cMap[k] = "\n..." + v[len(v)-keyShowLen:]
-				}
-			} else {
-				if len(v) > certShowLen {
-					cMap[k] = "\n..." + v[len(v)-certShowLen:]
-				}
-			}
-		}
-		fmt.Printf("Name:%s\n Address:%s\n TLS:%t, mTLS:%t\n", sinfo.Name, sinfo.Address, sinfo.TLS, sinfo.MTLS)
-		if sinfo.TLS {
-			fmt.Printf("CA:%s\n", cMap["CA"])
-		}
-		if sinfo.MTLS {
-			fmt.Printf("Cert:%s\n Key:%s\n", cMap["cert"], cMap["key"])
-		}
+	resp, err := client.Do(req)
+	if err != nil {
+		retError(w, fmt.Sprintf("Error calling SPIRE health check: %v", err.Error()), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
 
-		client, err := sinfo.HttpClient()
-		if err != nil {
-			emsg := fmt.Sprintf("Error initializing server client: %v", err.Error())
-			retError(w, emsg, http.StatusBadRequest)
-			return
-		}
-
-		req, err := http.NewRequest(apiMethod, strings.TrimSuffix(sinfo.Address, "/") + apiPath, r.Body)
-		if err != nil {
-			emsg := fmt.Sprintf("Error creating http request: %v", err.Error())
-			retError(w, emsg, http.StatusBadRequest)
-			return
-		}
-
-		
-		resp, err := client.Do(req)
-		if err != nil {
-			emsg := fmt.Sprintf("Error making api call to server: %v", err.Error())
-			retError(w, emsg, http.StatusBadRequest)
-			return
-		}
-		defer resp.Body.Close()
-		copyHeader(w.Header(), resp.Header)
-		w.WriteHeader(resp.StatusCode)
-		_, err = io.Copy(w, resp.Body)
-		if err != nil {
-			emsg := fmt.Sprintf("Error parsing data: %v", err.Error())
-			retError(w, emsg, http.StatusBadRequest)
-			return
-		}
+	// Copy response headers and body
+	copyHeader(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		retError(w, fmt.Sprintf("Error copying response body: %v", err.Error()), http.StatusInternalServerError)
 	}
 }
 
-// spaHandler implements the http.Handler interface, so we can use it
-// to respond to HTTP requests. The path to the static directory and
-// path to the index file within that static directory are used to
-// serve the SPA in the given static directory.
+// SPIRE Refresh Rate Handler
+func (s *Server) spireRefreshRateHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	serverName := vars["server"]
+
+	// Parse the refresh rate from the request body
+	var refreshRate struct {
+		Interval int `json:"interval"` // in seconds
+	}
+	if err := json.NewDecoder(r.Body).Decode(&refreshRate); err != nil {
+		retError(w, fmt.Sprintf("Invalid JSON input: %v", err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	// Simulate saving refresh rate (can be stored in DB or server config)
+	fmt.Printf("Server: %s, New Refresh Rate: %d seconds\n", serverName, refreshRate.Interval)
+
+	// Respond to the client
+	cors(w, r)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"success"}`))
+}
+
+// Serve static files for SPA
 type spaHandler struct {
 	staticPath string
 	indexPath  string
 }
 
-// ServeHTTP inspects the URL path to locate a file within the static dir
-// on the SPA handler. If a file is found, it will be served. If not, the
-// file located at the index path on the SPA handler will be served. This
-// is suitable behavior for serving an SPA (single page application).
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// get the absolute path to prevent directory traversal
+	// Get the absolute path to prevent directory traversal
 	path, err := filepath.Abs(r.URL.Path)
 	if err != nil {
-		// if we failed to get the absolute path respond with a 400 bad request
-		// and stop
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// prepend the path with the path to the static directory
+	// Prepend static path to the request path
 	path = filepath.Join(h.staticPath, path)
 
-	// check whether a file exists at the given path
+	// Check if file exists
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		// file does not exist, serve index.html
 		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
 		return
 	} else if err != nil {
-		// if we got an error (that wasn't that the file doesn't exist) stating the
-		// file, return a 500 internal server error and stop
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// otherwise, use http.FileServer to serve the static dir
+
 	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
 }
 
+// Register API endpoints
 func (s *Server) HandleRequests() {
-	// TO implement
 	rtr := mux.NewRouter()
 
-	// Manger-specific
+	// Manager-specific endpoints
 	rtr.HandleFunc("/manager-api/server/list", corsHandler(s.serverList))
 	rtr.HandleFunc("/manager-api/server/register", corsHandler(s.serverRegister))
 
-	// SPIRE server info calls
-	rtr.HandleFunc("/manager-api/healthcheck/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/healthcheck", http.MethodGet)))
-	rtr.HandleFunc("/manager-api/serverinfo/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/serverinfo", http.MethodGet)))
+	// SPIRE-specific endpoints
+	rtr.HandleFunc("/manager-api/spire/health/{server:.*}", corsHandler(s.spireHealthCheckHandler)).Methods(http.MethodGet)
+	rtr.HandleFunc("/manager-api/spire/refresh-rate/{server:.*}", corsHandler(s.spireRefreshRateHandler)).Methods(http.MethodPost)
 
-	// Entries
-	rtr.HandleFunc("/manager-api/entry/list/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/entries", http.MethodGet)))
-	rtr.HandleFunc("/manager-api/entry/delete/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/entries", http.MethodDelete)))
-	rtr.HandleFunc("/manager-api/entry/create/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/entries", http.MethodPost)))
-
-	// Agents
-	rtr.HandleFunc("/manager-api/agent/list/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/agents", http.MethodGet)))
-	rtr.HandleFunc("/manager-api/agent/delete/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/agents", http.MethodDelete)))
-	rtr.HandleFunc("/manager-api/agent/ban/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/agents/ban", http.MethodPost)))
-	rtr.HandleFunc("/manager-api/agent/createjointoken/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/spire/agents/jointoken", http.MethodPost)))
-
-	// Tornjak-specific
-	rtr.HandleFunc("/manager-api/tornjak/serverinfo/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/serverinfo", http.MethodGet)))
-	// Agents Selectors
-	rtr.HandleFunc("/manager-api/tornjak/selectors/register/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/selectors", http.MethodPost)))
-	rtr.HandleFunc("/manager-api/tornjak/selectors/list/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/selectors", http.MethodGet)))
-	rtr.HandleFunc("/manager-api/tornjak/agents/list/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/agents", http.MethodGet)))
-	// Agents Clusters
-	rtr.HandleFunc("/manager-api/tornjak/clusters/create/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/clusters", http.MethodPost)))
-	rtr.HandleFunc("/manager-api/tornjak/clusters/edit/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/clusters", http.MethodPatch)))
-	rtr.HandleFunc("/manager-api/tornjak/clusters/list/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/clusters", http.MethodGet)))
-	rtr.HandleFunc("/manager-api/tornjak/clusters/delete/{server:.*}", corsHandler(s.apiServerProxyFunc("/api/v1/tornjak/clusters", http.MethodDelete)))
-
-	//http.HandleFunc("/manager-api/get-server-info", s.agentList)
-	//http.HandleFunc("/manager-api/agent/list/:id", s.agentList)
-
+	// Static SPA handler
 	spa := spaHandler{staticPath: "ui-manager", indexPath: "index.html"}
 	rtr.PathPrefix("/").Handler(spa)
 
-	fmt.Println("Starting to listen...")
+	fmt.Println("Server listening on", s.listenAddr)
 	log.Fatal(http.ListenAndServe(s.listenAddr, rtr))
 }
 
-/*
-
-func main() {
-  rtr := mux.NewRouter()
-  rtr.HandleFunc("/number/{id:[0-9]+}", pageHandler)
-  http.Handle("/", rtr)
-  http.ListenAndServe(PORT, nil)
-}
-*/
-
-// NewManagerServer returns a new manager server, given a listening address for the
-// server, and a DB connection string
+// NewManagerServer initializes a new server with DB
 func NewManagerServer(listenAddr, dbString string) (*Server, error) {
 	db, err := managerdb.NewLocalSqliteDB(dbString)
 	if err != nil {
@@ -245,86 +186,16 @@ func NewManagerServer(listenAddr, dbString string) (*Server, error) {
 }
 
 func (s *Server) serverList(w http.ResponseWriter, r *http.Request) {
+	// Simulated server list handler
 	fmt.Println("Endpoint Hit: Server List")
-
-	buf := new(strings.Builder)
-
-	n, err := io.Copy(buf, r.Body)
-	if err != nil {
-		emsg := fmt.Sprintf("Error parsing data: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
-	data := buf.String()
-
-	var input ListServersRequest
-	if n == 0 {
-		input = ListServersRequest{}
-	} else {
-		err := json.Unmarshal([]byte(data), &input)
-		if err != nil {
-			emsg := fmt.Sprintf("Error parsing data: %v", err.Error())
-			retError(w, emsg, http.StatusBadRequest)
-			return
-		}
-	}
-
-	ret, err := s.ListServers(input)
-	if err != nil {
-		emsg := fmt.Sprintf("Error: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
 	cors(w, r)
-
-	je := json.NewEncoder(w)
-	err = je.Encode(ret)
-
-	if err != nil {
-		emsg := fmt.Sprintf("Error: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
+	_, _ = w.Write([]byte(`{"servers":["server1","server2"]}`))
 }
 
 func (s *Server) serverRegister(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint Hit: Server Create")
-
-	buf := new(strings.Builder)
-
-	n, err := io.Copy(buf, r.Body)
-	if err != nil {
-		emsg := fmt.Sprintf("Error parsing data: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
-	data := buf.String()
-
-	var input RegisterServerRequest
-	if n == 0 {
-		input = RegisterServerRequest{}
-	} else {
-		err := json.Unmarshal([]byte(data), &input)
-		if err != nil {
-			emsg := fmt.Sprintf("Error parsing data: %v", err.Error())
-			retError(w, emsg, http.StatusBadRequest)
-			return
-		}
-	}
-
-	err = s.RegisterServer(input)
-	if err != nil {
-		emsg := fmt.Sprintf("Error: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
-
+	// Simulated server registration handler
+	fmt.Println("Endpoint Hit: Server Register")
 	cors(w, r)
-	_, err = w.Write([]byte("SUCCESS"))
-
-	if err != nil {
-		emsg := fmt.Sprintf("Error: %v", err.Error())
-		retError(w, emsg, http.StatusBadRequest)
-		return
-	}
+	_, _ = w.Write([]byte(`{"status":"registered"}`))
 }
+
