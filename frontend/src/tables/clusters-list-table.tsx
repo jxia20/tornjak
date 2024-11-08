@@ -15,17 +15,13 @@ import TornjakApi from 'components/tornjak-api-helpers';
 // returns clusters data inside a carbon component table with specified functions
 
 type ClustersListTableProp = {
-    // dispatches a payload for list of clusters with their metadata info as an array of ClustersList Type and has a return type of void
     clustersListUpdateFunc: (globalClustersList: ClustersList[]) => void,
-    // data provided to the clusters table
     data: {
         key: string,
         props: { cluster: ClustersList }
     }[] | string | JSX.Element[],
     id: string,
-    // list of clusters with their metadata info as an array of ClustersList Type
     globalClustersList: ClustersList[],
-    // the selected server for manager mode 
     globalServerSelected: string,
 }
 
@@ -33,14 +29,15 @@ type ClustersListTableState = {
     listData: { key: string, props: { cluster: ClustersList } }[] | ClustersList[] | string | JSX.Element[],
     listTableData: {
         id: string;
+        clusterUID: string; // Added UID
         clusterName: string;
         clusterType: string;
         clusterManagedBy: string;
         clusterDomainName: string;
         clusterAssignedAgents: { props: { children: string } }
     }[]
-
 }
+
 class ClustersListTable extends React.Component<ClustersListTableProp, ClustersListTableState> {
     TornjakApi: TornjakApi;
     constructor(props: ClustersListTableProp) {
@@ -72,10 +69,19 @@ class ClustersListTable extends React.Component<ClustersListTableProp, ClustersL
         if (typeof (data) === "string" || data === undefined)
             return
         data.forEach(val => listData.push(Object.assign({}, val)));
-        let listtabledata: { id: string; clusterName: string; clusterType: string; clusterManagedBy: string; clusterDomainName: string; clusterAssignedAgents: { props: { children: string } } }[] = [];
+        let listtabledata: { 
+            id: string; 
+            clusterUID: string; // Added UID
+            clusterName: string; 
+            clusterType: string; 
+            clusterManagedBy: string; 
+            clusterDomainName: string; 
+            clusterAssignedAgents: { props: { children: string } } 
+        }[] = [];
         for (let i = 0; i < listData.length; i++) {
-            listtabledata[i] = { id: "", clusterName: "", clusterType: "", clusterManagedBy: "", clusterDomainName: "", clusterAssignedAgents: { props: { children: "" } } };
+            listtabledata[i] = { id: "", clusterUID: "", clusterName: "", clusterType: "", clusterManagedBy: "", clusterDomainName: "", clusterAssignedAgents: { props: { children: "" } } };
             listtabledata[i]["id"] = (i + 1).toString();
+            listtabledata[i]["clusterUID"] = listData[i].props.cluster.UID; // Setting UID
             listtabledata[i]["clusterName"] = listData[i].props.cluster.name;
             listtabledata[i]["clusterType"] = listData[i].props.cluster.platformType;
             listtabledata[i]["clusterManagedBy"] = listData[i].props.cluster.managedBy;
@@ -89,10 +95,10 @@ class ClustersListTable extends React.Component<ClustersListTableProp, ClustersL
 
     deleteCluster(selectedRows: readonly DenormalizedRow[]) {
         if (!selectedRows || selectedRows.length === 0) return "";
-        let cluster: { name: string }[] = [], successMessage
+        let cluster: { uid: string }[] = [], successMessage
 
         for (let i = 0; i < selectedRows.length; i++) {
-            cluster[i] = { name: selectedRows[i].cells[1].value };
+            cluster[i] = { uid: selectedRows[i].cells[1].value }; // Using UID for deletion
             if (IsManager) {
                 successMessage = this.TornjakApi.clusterDelete(this.props.globalServerSelected, { cluster: cluster[i] }, this.props.clustersListUpdateFunc, this.props.globalClustersList);
             } else {
@@ -100,16 +106,15 @@ class ClustersListTable extends React.Component<ClustersListTableProp, ClustersL
             }
             successMessage.then(function (result) {
                 if (result === "SUCCESS") {
-                    window.alert(`CLUSTER "${cluster[i].name}" DELETED SUCCESSFULLY!`);
+                    window.alert(`CLUSTER with UID "${cluster[i].uid}" DELETED SUCCESSFULLY!`);
                     window.location.reload();
                 } else {
-                    window.alert(`Error deleting cluster "${cluster[i].name}": ` + result);
+                    window.alert(`Error deleting cluster with UID "${cluster[i].uid}": ` + result);
                 }
                 return;
             })
         }
     }
-
 
     render() {
         const { listTableData } = this.state;
@@ -117,6 +122,10 @@ class ClustersListTable extends React.Component<ClustersListTableProp, ClustersL
             {
                 header: '#No',
                 key: 'id',
+            },
+            {
+                header: 'Cluster UID',
+                key: 'clusterUID', // New UID column
             },
             {
                 header: 'Cluster Name',
@@ -161,4 +170,4 @@ const mapStateToProps = (state: RootState) => ({
 export default connect(
     mapStateToProps,
     { clustersListUpdateFunc }
-)(ClustersListTable)
+)(ClustersListTable);
