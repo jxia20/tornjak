@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log"
 
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -16,70 +17,83 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
+// SPIRE Health Check APIs
+
 type HealthcheckRequest grpc_health_v1.HealthCheckRequest
 type HealthcheckResponse grpc_health_v1.HealthCheckResponse
 
-func (s *Server) SPIREHealthcheck(inp HealthcheckRequest) (*HealthcheckResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := grpc_health_v1.HealthCheckRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
+// SPIREHealthcheck performs a health check on the SPIRE server
+func (s *Server) SPIREHealthcheck(inp HealthcheckRequest) (*HealthcheckResponse, error) {
+	inpReq := grpc_health_v1.HealthCheckRequest(inp)
+
 	var conn *grpc.ClientConn
 	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		log.Printf("Failed to connect to SPIRE server: %v", err)
 		return nil, err
 	}
 	defer conn.Close()
-	client := grpc_health_v1.NewHealthClient(conn)
 
+	client := grpc_health_v1.NewHealthClient(conn)
 	resp, err := client.Check(context.Background(), &inpReq)
 	if err != nil {
+		log.Printf("SPIRE health check failed: %v", err)
 		return nil, err
 	}
 
+	log.Printf("SPIRE Health Check Status: %s", resp.Status.String())
 	return (*HealthcheckResponse)(resp), nil
 }
 
-type DebugServerRequest debugServer.GetInfoRequest
-type DebugServerResponse debugServer.GetInfoResponse
+// New SPIRE Health Check Refresh APIs
 
-func (s *Server) DebugServer(inp DebugServerRequest) (*DebugServerResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := debugServer.GetInfoRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	client := debugServer.NewDebugClient(conn)
-
-	resp, err := client.GetInfo(context.Background(), &inpReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return (*DebugServerResponse)(resp), nil
+type UpdateRefreshRateRequest struct {
+	ServerName string `json:"serverName"`
+	Interval   int    `json:"interval"` // Refresh rate in seconds
 }
+
+// UpdateHealthCheckRefreshRate updates the SPIRE health check refresh rate for the specified server
+func (s *Server) UpdateHealthCheckRefreshRate(req UpdateRefreshRateRequest) error {
+	if req.ServerName == "" {
+		return errors.New("server name is required")
+	}
+	if req.Interval <= 0 {
+		return errors.New("refresh rate interval must be positive")
+	}
+
+	// Log the updated refresh rate for now (future: save to config or DB)
+	log.Printf("Updated SPIRE health check refresh rate for server %s to %d seconds", req.ServerName, req.Interval)
+	return nil
+}
+
+// Existing Functionality: Retained for Agents, Entries, and Tornjak Info APIs
 
 type ListAgentsRequest agent.ListAgentsRequest
 type ListAgentsResponse agent.ListAgentsResponse
 
-func (s *Server) ListAgents(inp ListAgentsRequest) (*ListAgentsResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.ListAgentsRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
+func (s *Server) ListAgents(inp ListAgentsRequest) (*ListAgentsResponse, error) {
+	inpReq := agent.ListAgentsRequest(inp)
+
 	var conn *grpc.ClientConn
 	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		log.Printf("Failed to connect to SPIRE server: %v", err)
 		return nil, err
 	}
 	defer conn.Close()
-	client := agent.NewAgentClient(conn)
 
+	client := agent.NewAgentClient(conn)
 	resp, err := client.ListAgents(context.Background(), &inpReq)
 	if err != nil {
+		log.Printf("SPIRE List Agents failed: %v", err)
 		return nil, err
 	}
 
-	return (*ListAgentsResponse)(resp), nil
-}
+	log.Printf("Fetched List of SPIRE Agents")
+	return (*ListAgentsRes
 
-type BanAgentRequest agent.BanAgentRequest
+type BanAgentRequest agent.BanAgentRequestponse)(resp), nil
+	}
 
 func (s *Server) BanAgent(inp BanAgentRequest) error { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
 	inpReq := agent.BanAgentRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
