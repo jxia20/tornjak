@@ -22,14 +22,13 @@ import (
 type HealthcheckRequest grpc_health_v1.HealthCheckRequest
 type HealthcheckResponse grpc_health_v1.HealthCheckResponse
 
-// SPIREHealthcheck performs a health check on the SPIRE server
+// SPIREHealthcheck performs a health check on the SPIRE server.
 func (s *Server) SPIREHealthcheck(inp HealthcheckRequest) (*HealthcheckResponse, error) {
 	inpReq := grpc_health_v1.HealthCheckRequest(inp)
 
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := s.createGRPCConnection()
 	if err != nil {
-		log.Printf("Failed to connect to SPIRE server: %v", err)
+		log.Printf("SPIREHealthcheck: Failed to connect to SPIRE server: %v", err)
 		return nil, err
 	}
 	defer conn.Close()
@@ -37,47 +36,36 @@ func (s *Server) SPIREHealthcheck(inp HealthcheckRequest) (*HealthcheckResponse,
 	client := grpc_health_v1.NewHealthClient(conn)
 	resp, err := client.Check(context.Background(), &inpReq)
 	if err != nil {
-		log.Printf("SPIRE health check failed: %v", err)
+		log.Printf("SPIREHealthcheck: Health check failed: %v", err)
 		return nil, err
 	}
 
-	log.Printf("SPIRE Health Check Status: %s", resp.Status.String())
+	log.Printf("SPIREHealthcheck: Health Check Status: %s", resp.Status.String())
 	return (*HealthcheckResponse)(resp), nil
 }
 
-// New SPIRE Health Check Refresh APIs
-
-type UpdateRefreshRateRequest struct {
-	ServerName string `json:"serverName"`
-	Interval   int    `json:"interval"` // Refresh rate in seconds
-}
-
-// UpdateHealthCheckRefreshRate updates the SPIRE health check refresh rate for the specified server
+// UpdateHealthCheckRefreshRate updates the SPIRE health check refresh rate for the specified server.
 func (s *Server) UpdateHealthCheckRefreshRate(req UpdateRefreshRateRequest) error {
 	if req.ServerName == "" {
-		return errors.New("server name is required")
+		return errors.New("UpdateHealthCheckRefreshRate: Server name is required")
 	}
 	if req.Interval <= 0 {
-		return errors.New("refresh rate interval must be positive")
+		return errors.New("UpdateHealthCheckRefreshRate: Refresh rate interval must be positive")
 	}
 
-	// Log the updated refresh rate for now (future: save to config or DB)
-	log.Printf("Updated SPIRE health check refresh rate for server %s to %d seconds", req.ServerName, req.Interval)
+	log.Printf("UpdateHealthCheckRefreshRate: Updated refresh rate for server '%s' to %d seconds", req.ServerName, req.Interval)
 	return nil
 }
 
-// Existing Functionality: Retained for Agents, Entries, and Tornjak Info APIs
+// Agent APIs
 
-type ListAgentsRequest agent.ListAgentsRequest
-type ListAgentsResponse agent.ListAgentsResponse
-
+// ListAgents retrieves the list of agents from the SPIRE server.
 func (s *Server) ListAgents(inp ListAgentsRequest) (*ListAgentsResponse, error) {
 	inpReq := agent.ListAgentsRequest(inp)
 
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := s.createGRPCConnection()
 	if err != nil {
-		log.Printf("Failed to connect to SPIRE server: %v", err)
+		log.Printf("ListAgents: Failed to connect to SPIRE server: %v", err)
 		return nil, err
 	}
 	defer conn.Close()
@@ -85,74 +73,80 @@ func (s *Server) ListAgents(inp ListAgentsRequest) (*ListAgentsResponse, error) 
 	client := agent.NewAgentClient(conn)
 	resp, err := client.ListAgents(context.Background(), &inpReq)
 	if err != nil {
-		log.Printf("SPIRE List Agents failed: %v", err)
+		log.Printf("ListAgents: Failed to fetch list of agents: %v", err)
 		return nil, err
 	}
 
-	log.Printf("Fetched List of SPIRE Agents")
-	return (*ListAgentsRes
+	log.Println("ListAgents: Successfully fetched list of SPIRE agents")
+	return (*ListAgentsResponse)(resp), nil
+}
 
-type BanAgentRequest agent.BanAgentRequestponse)(resp), nil
-	}
+// BanAgent bans an agent on the SPIRE server.
+func (s *Server) BanAgent(inp BanAgentRequest) error {
+	return s.performAgentAction("BanAgent", func(client agent.AgentClient, ctx context.Context) error {
+		_, err := client.BanAgent(ctx, (*agent.BanAgentRequest)(&inp))
+		return err
+	})
+}
 
-func (s *Server) BanAgent(inp BanAgentRequest) error { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.BanAgentRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// DeleteAgent deletes an agent on the SPIRE server.
+func (s *Server) DeleteAgent(inp DeleteAgentRequest) error {
+	return s.performAgentAction("DeleteAgent", func(client agent.AgentClient, ctx context.Context) error {
+		_, err := client.DeleteAgent(ctx, (*agent.DeleteAgentRequest)(&inp))
+		return err
+	})
+}
+
+// Helper function for performing agent-related actions.
+func (s *Server) performAgentAction(actionName string, action func(agent.AgentClient, context.Context) error) error {
+	conn, err := s.createGRPCConnection()
 	if err != nil {
+		log.Printf("%s: Failed to connect to SPIRE server: %v", actionName, err)
 		return err
 	}
 	defer conn.Close()
+
 	client := agent.NewAgentClient(conn)
-
-	_, err = client.BanAgent(context.Background(), &inpReq)
+	err = action(client, context.Background())
 	if err != nil {
-		return err
+		log.Printf("%s: Failed to perform action: %v", actionName, err)
 	}
-
-	return nil
+	return err
 }
 
-type DeleteAgentRequest agent.DeleteAgentRequest
+// CreateJoinToken creates a join token for the SPIRE server.
+func (s *Server) CreateJoinToken(inp CreateJoinTokenRequest) (*CreateJoinTokenResponse, error) {
+	inpReq := agent.CreateJoinTokenRequest(inp)
 
-func (s *Server) DeleteAgent(inp DeleteAgentRequest) error { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.DeleteAgentRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := s.createGRPCConnection()
 	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	client := agent.NewAgentClient(conn)
-
-	_, err = client.DeleteAgent(context.Background(), &inpReq)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-type CreateJoinTokenRequest agent.CreateJoinTokenRequest
-type CreateJoinTokenResponse types.JoinToken
-
-func (s *Server) CreateJoinToken(inp CreateJoinTokenRequest) (*CreateJoinTokenResponse, error) { //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	inpReq := agent.CreateJoinTokenRequest(inp) //nolint:govet //Ignoring mutex (not being used) - sync.Mutex by value is unused for linter govet
-	var conn *grpc.ClientConn
-	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
+		log.Printf("CreateJoinToken: Failed to connect to SPIRE server: %v", err)
 		return nil, err
 	}
 	defer conn.Close()
-	client := agent.NewAgentClient(conn)
 
-	joinToken, err := client.CreateJoinToken(context.Background(), &inpReq)
+	client := agent.NewAgentClient(conn)
+	resp, err := client.CreateJoinToken(context.Background(), &inpReq)
 	if err != nil {
+		log.Printf("CreateJoinToken: Failed to create join token: %v", err)
 		return nil, err
 	}
 
-	return (*CreateJoinTokenResponse)(joinToken), nil
+	log.Println("CreateJoinToken: Successfully created join token")
+	return (*CreateJoinTokenResponse)(resp), nil
 }
+
+// Helper function to create a gRPC connection to the SPIRE server.
+func (s *Server) createGRPCConnection() (*grpc.ClientConn, error) {
+	conn, err := grpc.Dial(s.SpireServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("createGRPCConnection: Failed to connect to SPIRE server at %s: %v", s.SpireServerAddr, err)
+	}
+	return conn, err
+}
+
+// Remaining APIs (e.g., ListEntries, BatchCreateEntry, etc.) can follow similar patterns.
+
 
 // Entries
 
