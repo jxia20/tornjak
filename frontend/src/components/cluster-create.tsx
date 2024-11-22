@@ -217,56 +217,59 @@ class ClusterCreate extends Component<ClusterCreateProp, ClusterCreateState> {
 
   onSubmit(e: { preventDefault: () => void; } | undefined): void {
     if (e !== undefined) {
-      e.preventDefault()
+      e.preventDefault();
     }
-
+  
     if (!this.state.clusterName) {
-      showToast({ caption: "The cluster name cannot be empty." })
-      return
+      showToast({ caption: "The cluster name cannot be empty." });
+      return;
     }
-
+  
     if ((this.state.clusterTypeManualEntry && this.state.clusterType === this.state.clusterTypeManualEntryOption) || !this.state.clusterType) {
-      showToast({ caption: "The cluster type cannot be empty." })
-      return
+      showToast({ caption: "The cluster type cannot be empty." });
+      return;
     }
-
-    var cjtData = {
+  
+    const cjtData = {
       cluster: {
         name: this.state.clusterName,
         platformType: this.state.clusterType,
         domainName: this.state.clusterDomainName,
         managedBy: this.state.clusterManagedBy,
-        agentsList: this.state.clusterAgentsList ? this.state.clusterAgentsList : []
-      }
-    }
-
-    let endpoint = this.getApiEntryCreateEndpoint()
-
+        agentsList: this.state.clusterAgentsList ? this.state.clusterAgentsList : [],
+      },
+    };
+  
+    const endpoint = this.getApiEntryCreateEndpoint();
+  
     if (!endpoint) {
-      return
+      return;
     }
-
+  
     axios.post(endpoint, cjtData)
-        .then(res => {
-            const { cluster } = res.data;  // Assuming response contains cluster info with UID
-            this.setState({
-                message: `Request: ${JSON.stringify(cjtData, null, ' ')}\n\nSuccess: ${JSON.stringify(res.data, null, ' ')}`,
-                statusOK: "OK",
-            });
-
-            // Display success message with the generated UID
-            window.alert(`Cluster "${cluster.name}" created successfully with UID: ${cluster.uid}`);
-        })
-        .catch(err => {
-            showResponseToast(err);
-            this.setState({ statusOK: "ERROR" });
+      .then((res) => {
+        const { cluster } = res.data; // Assuming response contains cluster info with UID
+        this.setState({
+          message: `Request: ${JSON.stringify(cjtData, null, ' ')}\n\nSuccess: ${JSON.stringify(res.data, null, ' ')}`,
+          statusOK: "OK",
         });
-        
-    //scroll to bottom of page after submission  
+  
+        // Display success message with the generated UID
+        showToast({
+          caption: `Cluster "${cluster.name}" created successfully with UID: ${cluster.uid}`,
+          kind: "success",
+        });
+      })
+      .catch((err) => {
+        showResponseToast(err);
+        this.setState({ statusOK: "ERROR" });
+      });
+  
+    // Scroll to bottom of page after submission  
     setTimeout(() => {
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     }, 100);
-  }
+  }  
 
   render() {
     const ClusterType = this.props.clusterTypeList;
