@@ -382,7 +382,7 @@ class ClusterCreate extends Component<ClusterCreateProp, ClusterCreateState> {
                   <InlineNotification
                     kind="success"
                     hideCloseButton
-                    title="CLUSTER SUCCESSFULLY CREATED"
+                    title="CLUSTER SUCCESSFULLY CREATED NOW"
                     subtitle={
                       <div className="toast-messege" data-test="alert-primary">
                         <pre className="toast-messege-color">
