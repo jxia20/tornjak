@@ -9,7 +9,7 @@ import (
 	"github.com/spiffe/tornjak/pkg/manager/types"
 )
 
-// TO DO: Add DELETE servers option from the data base
+// TO DO: Add DELETE servers option from the database
 const (
 	initServersTable = "CREATE TABLE IF NOT EXISTS servers (servername TEXT PRIMARY KEY, address TEXT, tls bool, mtls bool, ca varBinary, cert varBinary, key varBinary)"
 )
@@ -26,11 +26,11 @@ func NewLocalSqliteDB(dbpath string) (ManagerDB, error) {
 	// Table for servers
 	statement, err := database.Prepare(initServersTable)
 	if err != nil {
-		return nil, errors.Errorf("Unable to execute SQL query :%v", initServersTable)
+		return nil, errors.Errorf("Unable to execute SQL query: %v", initServersTable)
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		return nil, errors.Errorf("Unable to execute SQL query :%v", initServersTable)
+		return nil, errors.Errorf("Unable to execute SQL query: %v", initServersTable)
 	}
 
 	return &LocalSqliteDb{
@@ -95,4 +95,17 @@ func (db *LocalSqliteDb) GetServer(name string) (types.ServerInfo, error) {
 	}
 
 	return sinfo, nil
+}
+
+func (db *LocalSqliteDb) DeleteServer(name string) error {
+	statement, err := db.database.Prepare("DELETE FROM servers WHERE servername=?")
+	if err != nil {
+		return errors.Errorf("Unable to prepare DELETE SQL query: %v", err)
+	}
+	_, err = statement.Exec(name)
+	if err != nil {
+		return errors.Errorf("Unable to execute DELETE SQL query for server: %s", name)
+	}
+
+	return nil
 }
