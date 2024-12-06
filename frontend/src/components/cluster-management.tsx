@@ -22,40 +22,33 @@ import {
   ServerInfo,
   TornjakServerInfo,
   DebugServerInfo
-} from './types'
+} from './types';
 import { toast } from 'react-toastify';
 // import PropTypes from "prop-types"; // needed for testing will be removed on last pr
+
 type ClusterManagementProp = {
-  // tornjak server debug info of the selected server
   globalDebugServerInfo: DebugServerInfo,
-  // dispatches a payload for list of agents with their metadata info as an array of AgentListType and has a return type of void
   agentsListUpdateFunc: (globalAgentsList: AgentsList[]) => void,
-  // dispatches a payload for an Error Message/ Success Message of an executed function as a string and has a return type of void
   tornjakMessageFunc: (globalErrorMessage: string) => void,
-  // dispatches a payload for the tornjak server info of the selected server and has a return type of void
   tornjakServerInfoUpdateFunc: (globalTornjakServerInfo: TornjakServerInfo) => void,
-  // dispatches a payload for the server trust domain and nodeAttestorPlugin as a ServerInfoType and has a return type of void
   serverInfoUpdateFunc: (globalServerInfo: ServerInfo) => void,
-  // the selected server for manager mode
   globalServerSelected: string,
-  // error/ success messege returned for a specific function
   globalErrorMessage: string,
-  // tornjak server info of the selected server
   globalTornjakServerInfo: TornjakServerInfo,
-  // the server trust domain and nodeAttestorPlugin as a ServerInfoType
   globalServerInfo: ServerInfo,
-  // cluster types as array of strings
   globalClusterTypeInfo: string[],
-  // list of available agents as array of AgentsListType
   globalAgentsList: AgentsList[],
 }
+
 type ClusterManagementState = {
   clusterTypeList: string[],
   agentsList: AgentLabels[],
   agentsListDisplay: string,
   clusterTypeManualEntryOption: string,
   selectedServer: string,
+  isLoading: boolean, // New state for managing loading indicator
 }
+
 class ClusterManagement extends Component<ClusterManagementProp, ClusterManagementState> {
   TornjakApi: TornjakApi;
   constructor(props: ClusterManagementProp) {
@@ -63,14 +56,17 @@ class ClusterManagement extends Component<ClusterManagementProp, ClusterManageme
     this.TornjakApi = new TornjakApi(props);
     this.prepareClusterTypeList = this.prepareClusterTypeList.bind(this);
     this.prepareAgentsList = this.prepareAgentsList.bind(this);
+    this.handleTabSelect = this.handleTabSelect.bind(this); // Added binding for handleTabSelect
     this.state = {
       clusterTypeList: [],
       agentsList: [],
       agentsListDisplay: "Select Agents",
       clusterTypeManualEntryOption: "----Select this option and Enter Custom Cluster Type Below----",
       selectedServer: "",
-    }
+      isLoading: true, // Initialize loading state
+    };
   }
+
   componentDidMount() {
     if (IsManager) {
       if (this.props.globalServerSelected !== "" && (this.props.globalErrorMessage === "OK" || this.props.globalErrorMessage === "")) {
@@ -87,7 +83,9 @@ class ClusterManagement extends Component<ClusterManagementProp, ClusterManageme
       this.prepareClusterTypeList();
       this.prepareAgentsList();
     }
+    this.setState({ isLoading: false }); // Set loading to false after data fetch
   }
+
   componentDidUpdate(prevProps: ClusterManagementProp, prevState: ClusterManagementState) {
     if (IsManager) {
       if (prevProps.globalServerSelected !== this.props.globalServerSelected) {
@@ -102,49 +100,52 @@ class ClusterManagement extends Component<ClusterManagementProp, ClusterManageme
       }
     }
   }
+
   prepareClusterTypeList(): void {
-    // user prefered option
-    let localClusterTypeList = [this.state.clusterTypeManualEntryOption]
-    // cluster type list
+    let localClusterTypeList = [this.state.clusterTypeManualEntryOption];
     for (let i = 0; i < this.props.globalClusterTypeInfo.length; i++) {
-      localClusterTypeList.push(this.props.globalClusterTypeInfo[i])
+      localClusterTypeList.push(this.props.globalClusterTypeInfo[i]);
     }
-    this.setState({ clusterTypeList: localClusterTypeList })
+    this.setState({ clusterTypeList: localClusterTypeList });
   }
+
   prepareAgentsList(): void {
-    var prefix = "spiffe://";
+    const prefix = "spiffe://";
     let localAgentsIdList: AgentLabels[] = [];
-    //agents
     if (this.props.globalAgentsList === undefined) {
-      return
+      return;
     }
     for (let i = 0; i < this.props.globalAgentsList.length; i++) {
-      localAgentsIdList[i] = { "label": "" }
+      localAgentsIdList[i] = { label: "" };
       localAgentsIdList[i]["label"] = prefix + this.props.globalAgentsList[i].id.trust_domain + this.props.globalAgentsList[i].id.path;
     }
     this.setState({
       agentsList: localAgentsIdList,
     });
   }
+
   handleTabSelect(): void {
-    toast.dismiss()
+    toast.dismiss();
+    this.setState({ agentsListDisplay: "Select Agents" }); // Reset agents list display on tab select
   }
+
   render() {
+    if (this.state.isLoading) {
+      return <div>Loading...</div>; // Loading indicator
+    }
     return (
       <div className="cluster-management-tabs" data-test="cluster-management">
         <Tabs>
-          <TabList aria-label='hi'>
+          <TabList aria-label="hi">
             <Tab
               className="cluster-management-tab1"
               id="tab-1"
-              // label="Create Cluster"
               onClick={this.handleTabSelect}
             >
               Create Cluster
             </Tab>
             <Tab
               id="tab-2"
-              // label="Edit Cluster"
               onClick={this.handleTabSelect}
             >
               Edit Cluster
@@ -166,25 +167,10 @@ class ClusterManagement extends Component<ClusterManagementProp, ClusterManageme
           </TabPanels>
         </Tabs>
       </div>
-    )
+    );
   }
 }
-// Note: Needed for UI testing - will be removed after
-// ClusterManagement.propTypes = {
-//   globalClusterTypeInfo: PropTypes.array,
-//   globalServerSelected: PropTypes.string,
-//   globalAgentsList: PropTypes.array,
-//   globalServerInfo: PropTypes.object,
-//   globalTornjakServerInfo: PropTypes.object,
-//   globalErrorMessage: PropTypes.string,
-//   clusterTypeInfoFunc: PropTypes.func,
-//   serverSelectedFunc: PropTypes.func,
-//   agentsListUpdateFunc: PropTypes.func,
-//   tornjakServerInfoUpdateFunc: PropTypes.func,
-//   serverInfoUpdateFunc: PropTypes.func,
-//   selectorInfoFunc: PropTypes.func,
-//   tornjakMessageFunc: PropTypes.func,
-// };
+
 const mapStateToProps = (state: RootState) => ({
   globalClusterTypeInfo: state.clusters.globalClusterTypeInfo,
   globalServerSelected: state.servers.globalServerSelected,
@@ -193,9 +179,11 @@ const mapStateToProps = (state: RootState) => ({
   globalTornjakServerInfo: state.servers.globalTornjakServerInfo,
   globalErrorMessage: state.tornjak.globalErrorMessage,
   globalDebugServerInfo: state.servers.globalDebugServerInfo,
-})
+});
+
 export default connect(
   mapStateToProps,
   { clusterTypeInfoFunc, serverSelectedFunc, selectorInfoFunc, agentsListUpdateFunc, tornjakMessageFunc, tornjakServerInfoUpdateFunc, serverInfoUpdateFunc }
-)(ClusterManagement)
-export { ClusterManagement }
+)(ClusterManagement);
+
+export { ClusterManagement };
