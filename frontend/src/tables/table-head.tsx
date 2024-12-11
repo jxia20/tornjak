@@ -17,7 +17,7 @@ const { TableHead, TableRow, TableSelectAll, TableHeader } = DataTable;
 // - headers: Header data of the table
 // - getHeaderProps: Function to get header properties from DataTable
 // Returns the header of the table for the specified entity
-type HeadProp = {
+type HeadProps = {
   headers: DataTableHeader<string>[];
   getSelectionProps: <E extends object = {}>(
     data?:
@@ -29,7 +29,7 @@ type HeadProp = {
   ) => ShapeOf<DataTableCustomHeaderProps<DataTableHeader<string>>, E>;
 };
 
-class Head extends React.Component<HeadProp> {
+class Head extends React.Component<HeadProps> {
   render() {
     const { headers, getSelectionProps, getHeaderProps } = this.props;
 
@@ -38,7 +38,11 @@ class Head extends React.Component<HeadProp> {
         <TableRow>
           <TableSelectAll {...getSelectionProps()} />
           {headers.map((header) => (
-            <TableHeader key={header.key} {...getHeaderProps({ header })}>
+            <TableHeader
+              key={header.key}
+              {...getHeaderProps({ header })}
+              className="table-header"
+            >
               {header.header}
             </TableHeader>
           ))}
