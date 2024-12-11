@@ -1,4 +1,5 @@
 import './style.css';
+import React, { Component } from 'react';
 import { RootState } from 'redux/reducers';
 import { connect } from 'react-redux';
 import { Tooltip, InlineLoading } from 'carbon-components-react';
@@ -6,18 +7,19 @@ import TornjakApi from './tornjak-api-helpers';
 import { spireHealthCheckFunc, spireHealthCheckingFunc } from 'redux/actions';
 
 type SpireHealthCheckProp = {
-  spireHealthCheckFunc: (globalSpireHealthCheck: boolean) => void,
-  globalSpireHealthCheck: boolean,
-  spireHealthCheckingFunc: (globalSpireHealthCheck: boolean) => void,
-  globalSpireHealthChecking: boolean,
+  spireHealthCheckFunc: (globalSpireHealthCheck: boolean) => void;
+  globalSpireHealthCheck: boolean;
+  spireHealthCheckingFunc: (globalSpireHealthChecking: boolean) => void;
+  globalSpireHealthChecking: boolean;
 };
 
 type SpireHealthCheckState = {
-  timer: NodeJS.Timeout | null,
+  timer: NodeJS.Timeout | null;
 };
 
 class SpireHealthCheck extends Component<SpireHealthCheckProp, SpireHealthCheckState> {
   TornjakApi: TornjakApi;
+
   constructor(props: SpireHealthCheckProp) {
     super(props);
     this.TornjakApi = new TornjakApi(props);
@@ -28,26 +30,40 @@ class SpireHealthCheck extends Component<SpireHealthCheckProp, SpireHealthCheckS
 
   componentDidMount() {
     this.startTimer();
-    this.TornjakApi.spireHealthCheck(this.props.spireHealthCheckFunc, this.props.spireHealthCheckingFunc);
+    this.checkSpireHealth();
   }
 
-  componentDidUpdate(prevProps: SpireHealthCheckProp, prevState: SpireHealthCheckState) {
-    if (prevState.timer !== this.state.timer) {
-      this.TornjakApi.spireHealthCheck(this.props.spireHealthCheckFunc, this.props.spireHealthCheckingFunc);
+  componentDidUpdate(prevProps: SpireHealthCheckProp) {
+    // Perform health check if globalSpireHealthChecking changes
+    if (prevProps.globalSpireHealthChecking !== this.props.globalSpireHealthChecking) {
+      this.checkSpireHealth();
+    }
+  }
+
+  componentWillUnmount() {
+    // Clear the timer to prevent memory leaks
+    if (this.state.timer) {
+      clearTimeout(this.state.timer);
     }
   }
 
   startTimer = () => {
     const timer = setTimeout(() => {
-      this.setState({ timer: new Date() });
+      this.checkSpireHealth();
       this.startTimer(); // Restart timer
     }, 60000); // Default refresh rate: 1 minute
     this.setState({ timer });
   };
 
+  checkSpireHealth = () => {
+    const { spireHealthCheckFunc, spireHealthCheckingFunc } = this.props;
+    this.TornjakApi.spireHealthCheck(spireHealthCheckFunc, spireHealthCheckingFunc);
+  };
+
   render() {
     const { globalSpireHealthCheck, globalSpireHealthChecking } = this.props;
-    let spireStatus = (
+
+    const spireStatus = (
       <div>
         {globalSpireHealthChecking ? (
           <InlineLoading description="Checking SPIRE health..." />
