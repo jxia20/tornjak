@@ -1,12 +1,12 @@
 import './style.css';
 import React, { Component } from 'react';
-import { RootState } from 'redux/reducers';
 import { connect } from 'react-redux';
 import { Tooltip, InlineLoading } from 'carbon-components-react';
+import { RootState } from 'redux/reducers';
 import TornjakApi from './tornjak-api-helpers';
 import { spireHealthCheckFunc, spireHealthCheckingFunc } from 'redux/actions';
 
-type SpireHealthCheckProp = {
+type SpireHealthCheckProps = {
   spireHealthCheckFunc: (globalSpireHealthCheck: boolean) => void;
   globalSpireHealthCheck: boolean;
   spireHealthCheckingFunc: (globalSpireHealthChecking: boolean) => void;
@@ -17,64 +17,79 @@ type SpireHealthCheckState = {
   timer: NodeJS.Timeout | null;
 };
 
-class SpireHealthCheck extends Component<SpireHealthCheckProp, SpireHealthCheckState> {
-  TornjakApi: TornjakApi;
+class SpireHealthCheck extends Component<SpireHealthCheckProps, SpireHealthCheckState> {
+  private tornjakApi: TornjakApi;
 
-  constructor(props: SpireHealthCheckProp) {
+  constructor(props: SpireHealthCheckProps) {
     super(props);
-    this.TornjakApi = new TornjakApi(props);
+    this.tornjakApi = new TornjakApi(props);
     this.state = {
       timer: null,
     };
   }
 
   componentDidMount() {
-    this.startTimer();
-    this.checkSpireHealth();
+    this.initiateHealthCheck();
   }
 
-  componentDidUpdate(prevProps: SpireHealthCheckProp) {
-    // Perform health check if globalSpireHealthChecking changes
-    if (prevProps.globalSpireHealthChecking !== this.props.globalSpireHealthChecking) {
+  componentDidUpdate(prevProps: SpireHealthCheckProps) {
+    // Ensure health check is retriggered only when the health checking status changes
+    if (
+      prevProps.globalSpireHealthChecking !== this.props.globalSpireHealthChecking
+    ) {
       this.checkSpireHealth();
     }
   }
 
   componentWillUnmount() {
-    // Clear the timer to prevent memory leaks
-    if (this.state.timer) {
-      clearTimeout(this.state.timer);
-    }
+    this.clearTimer();
   }
+
+  initiateHealthCheck = () => {
+    this.startTimer();
+    this.checkSpireHealth();
+  };
 
   startTimer = () => {
     const timer = setTimeout(() => {
       this.checkSpireHealth();
-      this.startTimer(); // Restart timer
-    }, 60000); // Default refresh rate: 1 minute
+      this.startTimer(); // Recursively continue health checks at intervals
+    }, 60000); // 1-minute interval
     this.setState({ timer });
+  };
+
+  clearTimer = () => {
+    const { timer } = this.state;
+    if (timer) {
+      clearTimeout(timer);
+      this.setState({ timer: null });
+    }
   };
 
   checkSpireHealth = () => {
     const { spireHealthCheckFunc, spireHealthCheckingFunc } = this.props;
-    this.TornjakApi.spireHealthCheck(spireHealthCheckFunc, spireHealthCheckingFunc);
+    try {
+      this.tornjakApi.spireHealthCheck(spireHealthCheckFunc, spireHealthCheckingFunc);
+    } catch (error) {
+      console.error("Failed to perform SPIRE health check:", error);
+    }
+  };
+
+  renderSpireStatus = () => {
+    const { globalSpireHealthCheck, globalSpireHealthChecking } = this.props;
+
+    if (globalSpireHealthChecking) {
+      return <InlineLoading description="Checking SPIRE health..." />;
+    }
+
+    return globalSpireHealthCheck ? (
+      <p>SPIRE is healthy</p>
+    ) : (
+      <p>SPIRE is unhealthy</p>
+    );
   };
 
   render() {
-    const { globalSpireHealthCheck, globalSpireHealthChecking } = this.props;
-
-    const spireStatus = (
-      <div>
-        {globalSpireHealthChecking ? (
-          <InlineLoading description="Checking SPIRE health..." />
-        ) : globalSpireHealthCheck ? (
-          <p>SPIRE is healthy</p>
-        ) : (
-          <p>SPIRE is unhealthy</p>
-        )}
-      </div>
-    );
-
     return (
       <div className="health-check">
         <div className="spire-health-refresh-tooltip">
@@ -86,7 +101,7 @@ class SpireHealthCheck extends Component<SpireHealthCheckProp, SpireHealthCheckS
           <div className="health-status-check-title">
             <h6>SPIRE: </h6>
           </div>
-          {spireStatus}
+          {this.renderSpireStatus()}
         </div>
       </div>
     );
